@@ -1,0 +1,155 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <unordered_set>
+#include <unordered_map>
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <sstream>
+using namespace std;
+
+// 读取数据
+vector<vector<string>> ReadFile(string file) {
+    vector<vector<string>> data;
+    string line;
+    ifstream infile(file);
+
+    if (!infile.is_open()) {
+        cerr << "无法打开文件!" << endl;
+        return {};
+    }
+
+    while (getline(infile, line)) {
+        vector<string> transaction;
+        string word;
+        stringstream ss(line);
+        while (ss >> word) {
+            transaction.push_back(word);
+        }
+        data.push_back(transaction);
+    }
+
+    infile.close();
+    return data;
+}
+
+// 计算项集的支持度
+double calculateSupport(const vector<string>& itemset, const vector<vector<string>>& data) {
+    int count = 0;
+    for (const auto& transaction : data) {
+        unordered_set<string> transactionSet(transaction.begin(), transaction.end());
+        bool containsAll = true;
+        for (const auto& item : itemset) {
+            if (transactionSet.find(item) == transactionSet.end()) {
+                containsAll = false;
+                break;
+            }
+        }
+        if (containsAll) {
+            count++;
+        }
+    }
+    return double(count) / data.size();
+}
+
+// 生成候选项集的函数
+vector<unordered_set<string>> generateCandidates(const vector<unordered_set<string>>& prevFrequentItemsets) {
+    vector<unordered_set<string>> candidates;
+    int prevSize = prevFrequentItemsets.size();
+    for (int i = 0; i < prevSize; ++i) {
+        for (int j = i + 1; j < prevSize; ++j) {
+            unordered_set<string> candidate;
+            set_union(prevFrequentItemsets[i].begin(), prevFrequentItemsets[i].end(),
+                      prevFrequentItemsets[j].begin(), prevFrequentItemsets[j].end(),
+                      inserter(candidate, candidate.end()));
+            if (candidate.size() == prevFrequentItemsets[i].size() + 1) {
+                candidates.push_back(candidate);
+            }
+        }
+    }
+    return candidates;
+}
+
+// Apriori算法
+void apriori(const vector<vector<string>>& data, double supportThreshold) {
+    unordered_map<int, vector<unordered_set<string>>> frequentItemsets;
+    unordered_map<int, vector<unordered_set<string>>> candidateItemsets;
+
+    // 生成1项集候选项
+    unordered_set<string> candidate1;
+    for (const auto& transaction : data) {
+        for (const auto& item : transaction) {
+            candidate1.insert(item);
+        }
+    }
+
+    vector<unordered_set<string>> candidate1Set;
+    for (const auto& item : candidate1) {
+        candidate1Set.push_back({item});
+    }
+
+    candidateItemsets[1] = candidate1Set;
+
+    // 找到频繁1项集
+    vector<unordered_set<string>> frequent1;
+    for (const auto& candidate : candidateItemsets[1]) {
+        double support = calculateSupport({candidate.begin(), candidate.end()}, data);
+        if (support >= supportThreshold) {
+            frequent1.push_back(candidate);
+        }
+    }
+    frequentItemsets[1] = frequent1;
+
+    // 生成更高阶的候选项集
+    int k = 2;
+    while (frequentItemsets[k - 1].size() > 0) {
+        candidateItemsets[k] = generateCandidates(frequentItemsets[k - 1]);
+
+        // 找到频繁k项集
+        vector<unordered_set<string>> frequentK;
+        for (const auto& candidate : candidateItemsets[k]) {
+            double support = calculateSupport({candidate.begin(), candidate.end()}, data);
+            if (support >= supportThreshold) {
+                frequentK.push_back(candidate);
+            }
+        }
+        if (frequentK.size() == 0) break;
+
+        frequentItemsets[k] = frequentK;
+        k++;
+    }
+
+    // 输出结果
+    cout << "频繁项集及其支持度：\n";
+    for (int i = 1; i < k; ++i) {
+        for (const auto& itemset : frequentItemsets[i]) {
+            cout << "{ ";
+            for (const auto& item : itemset) {
+                cout << item << " ";
+            }
+            cout << "} ";
+            cout << "支持度: " << calculateSupport({itemset.begin(), itemset.end()}, data) << endl;
+        }
+    }
+}
+
+int main() {
+    string file = "../data/data.txt";  // 输入数据文件
+    double supportThreshold = 0.4;  // 设置支持度阈值（如30%）
+
+    // 读取数据
+    vector<vector<string>> data = ReadFile(file);
+        vector<vector<string>> repeatedData;
+
+    for (int i = 0; i < 100000; ++i) {
+        repeatedData.insert(repeatedData.end(), data.begin(), data.end());
+    }
+    clock_t start=clock();
+    // 运行Apriori算法
+    apriori(repeatedData, supportThreshold);
+    clock_t end=clock();
+    double duration = double(end - start) / CLOCKS_PER_SEC;
+    cout << "程序运行时间: " << duration << " 秒" << endl;
+    return 0;
+}
